@@ -1,3 +1,8 @@
+/**
+ * AnalysisResult — Menampilkan hasil analisa kecocokan CV.
+ * Terdiri dari ring skor, daftar skill (cocok/sebagian/kurang),
+ * kelebihan CV, area perbaikan, rekomendasi, dan insight perbaikan CV.
+ */
 import {
   CheckCircle2,
   XCircle,
@@ -7,49 +12,72 @@ import {
   Lightbulb,
   ArrowRight,
   RotateCcw,
+  FileEdit,
 } from "lucide-react";
+import CvInsight, { type CvInsightData, CvInsightLoading } from "./CvInsight";
 
+/** Struktur data hasil analisa dari backend */
 export interface AnalysisData {
+  /** Skor kecocokan 0-100 */
   matchScore: number;
+  /** Ringkasan singkat kecocokan */
   summary: string;
+  /** Skill yang cocok dan dimiliki kandidat */
   matchedSkills: string[];
+  /** Skill yang dibutuhkan tapi tidak dimiliki */
   missingSkills: string[];
+  /** Skill yang sebagian dimiliki */
   partialSkills: string[];
+  /** Kelebihan kandidat */
   strengths: string[];
+  /** Area yang perlu ditingkatkan */
   improvements: string[];
+  /** Rekomendasi konkret */
   recommendations: string[];
 }
 
+/** Props untuk AnalysisResult */
 interface AnalysisResultProps {
+  /** Data hasil analisa dari backend */
   data: AnalysisData;
+  /** Callback untuk reset dan mulai analisa ulang */
   onReset: () => void;
+  /** Data insight perbaikan CV (null jika belum diminta) */
+  insightData: CvInsightData | null;
+  /** Apakah sedang loading insight */
+  insightLoading: boolean;
+  /** Callback untuk meminta insight perbaikan CV */
+  onRequestInsight: () => void;
+  /** Error saat memuat insight */
+  insightError: string | null;
 }
 
+/** Ring skor sirkular dengan warna berdasarkan nilai (hijau/kuning/merah) */
 function ScoreRing({ score }: { score: number }) {
-  const radius = 58;
+  const radius = 60;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
 
   const getColor = () => {
-    if (score >= 80) return { stroke: "#22c55e", bg: "bg-success-50", text: "text-success-600" };
-    if (score >= 60) return { stroke: "#f59e0b", bg: "bg-warning-50", text: "text-warning-600" };
-    return { stroke: "#ef4444", bg: "bg-danger-50", text: "text-danger-600" };
+    if (score >= 80) return { stroke: "#22c55e", bg: "bg-success-50", text: "text-success-600", label: "Sangat Cocok" };
+    if (score >= 60) return { stroke: "#f59e0b", bg: "bg-warning-50", text: "text-warning-600", label: "Cukup Cocok" };
+    return { stroke: "#ef4444", bg: "bg-danger-50", text: "text-danger-600", label: "Kurang Cocok" };
   };
 
   const color = getColor();
 
   return (
-    <div className="flex flex-col items-center gap-2 sm:gap-3 lg:gap-4">
-      <div className="relative w-28 h-28 sm:w-36 sm:h-36 lg:w-44 lg:h-44 2xl:w-52 2xl:h-52 3xl:w-60 3xl:h-60">
+    <div className="flex flex-col items-center gap-4">
+      <div className="relative w-44 h-44 sm:w-52 sm:h-52">
         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 128 128">
-          <circle cx="64" cy="64" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="8" />
+          <circle cx="64" cy="64" r={radius} fill="none" stroke="#f1f5f9" className="dark:stroke-slate-700" strokeWidth="10" />
           <circle
             cx="64"
             cy="64"
             r={radius}
             fill="none"
             stroke={color.stroke}
-            strokeWidth="8"
+            strokeWidth="10"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
             strokeLinecap="round"
@@ -57,153 +85,213 @@ function ScoreRing({ score }: { score: number }) {
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`text-2xl sm:text-3xl lg:text-4xl 2xl:text-5xl 3xl:text-6xl font-extrabold ${color.text}`}>{score}</span>
-          <span className="text-[10px] sm:text-xs lg:text-sm 2xl:text-base text-gray-400 font-medium">dari 100</span>
+          <span className={`text-5xl sm:text-6xl font-extrabold ${color.text}`}>{score}</span>
+          <span className="text-sm text-gray-400 dark:text-slate-500 font-medium">dari 100</span>
         </div>
       </div>
-      <div className={`${color.bg} px-3 sm:px-4 lg:px-5 2xl:px-6 py-1 sm:py-1.5 lg:py-2 2xl:py-2.5 rounded-full`}>
-        <span className={`text-[10px] sm:text-xs lg:text-sm 2xl:text-base font-bold ${color.text}`}>
-          {score >= 80 ? "Sangat Cocok" : score >= 60 ? "Cukup Cocok" : "Kurang Cocok"}
-        </span>
+      <div className={`${color.bg} px-5 py-2 rounded-full`}>
+        <span className={`text-sm font-bold ${color.text}`}>{color.label}</span>
       </div>
     </div>
   );
 }
 
+/** Tag skill dengan ikon dan warna berdasarkan tipe kecocokan */
 function SkillTag({ skill, type }: { skill: string; type: "matched" | "missing" | "partial" }) {
   const styles = {
-    matched: "bg-success-50 text-success-600 border-success-500/20",
-    missing: "bg-danger-50 text-danger-600 border-danger-500/20",
-    partial: "bg-warning-50 text-warning-600 border-warning-500/20",
+    matched: "bg-success-50 dark:bg-success-900/20 text-success-600 dark:text-success-400 border-success-200 dark:border-success-800/40",
+    missing: "bg-danger-50 dark:bg-danger-900/20 text-danger-600 dark:text-danger-400 border-danger-200 dark:border-danger-800/40",
+    partial: "bg-warning-50 dark:bg-warning-900/20 text-warning-600 dark:text-warning-400 border-warning-200 dark:border-warning-800/40",
   };
 
   const icons = {
-    matched: <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-3.5 lg:h-3.5" />,
-    missing: <XCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-3.5 lg:h-3.5" />,
-    partial: <AlertCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-3.5 lg:h-3.5" />,
+    matched: <CheckCircle2 className="w-4 h-4" />,
+    missing: <XCircle className="w-4 h-4" />,
+    partial: <AlertCircle className="w-4 h-4" />,
   };
 
   return (
-    <span className={`inline-flex items-center gap-1 sm:gap-1.5 lg:gap-2 px-2 sm:px-3 lg:px-4 2xl:px-5 py-1 sm:py-1.5 lg:py-2 2xl:py-2.5 rounded-full text-[10px] sm:text-xs lg:text-sm 2xl:text-base font-semibold border ${styles[type]}`}>
+    <span className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-sm font-semibold border ${styles[type]}`}>
       {icons[type]}
       {skill}
     </span>
   );
 }
 
-export default function AnalysisResult({ data, onReset }: AnalysisResultProps) {
+/** Kartu section generik */
+function SectionCard({ icon, title, children, accent = "primary" }: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+  accent?: "primary" | "success" | "warning" | "danger";
+}) {
+  const iconBg = {
+    primary: "bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400",
+    success: "bg-success-100 dark:bg-success-900/30 text-success-600 dark:text-success-400",
+    warning: "bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400",
+    danger: "bg-danger-100 dark:bg-danger-900/30 text-danger-600 dark:text-danger-400",
+  };
+
   return (
-    <div className="space-y-4 sm:space-y-6 lg:space-y-8 2xl:space-y-10 animate-slide-up">
-      <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl lg:rounded-3xl border border-gray-200/60 p-4 sm:p-6 lg:p-8 2xl:p-10 3xl:p-14 shadow-sm">
-        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 lg:gap-8 2xl:gap-10 3xl:gap-14">
+    <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-slate-700/50 p-6 shadow-sm animate-fade-in">
+      <div className="flex items-center gap-3 mb-5">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg[accent]}`}>
+          {icon}
+        </div>
+        <h4 className="text-base font-bold text-gray-900 dark:text-white">{title}</h4>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export default function AnalysisResult({ data, onReset, insightData, insightLoading, onRequestInsight, insightError }: AnalysisResultProps) {
+  return (
+    <div className="space-y-8 animate-slide-up">
+      {/* Score & Summary */}
+      <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-slate-700/50 p-9 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-center gap-7">
           <ScoreRing score={data.matchScore} />
           <div className="flex-1 text-center sm:text-left">
-            <h3 className="text-base sm:text-lg lg:text-xl 2xl:text-2xl 3xl:text-3xl font-bold text-gray-900 mb-1 sm:mb-2 lg:mb-3">Hasil Analisa</h3>
-            <p className="text-xs sm:text-sm lg:text-base 2xl:text-lg 3xl:text-xl text-gray-600 leading-relaxed">{data.summary}</p>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Hasil Analisa</h3>
+            <p className="text-base text-gray-500 dark:text-slate-400 leading-relaxed">{data.summary}</p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-5 2xl:gap-6">
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl lg:rounded-3xl border border-gray-200/60 p-4 sm:p-6 lg:p-8 2xl:p-10 shadow-sm animate-fade-in">
-          <div className="flex items-center gap-2 lg:gap-3 mb-3 sm:mb-4 lg:mb-5">
-            <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6 text-primary-600 flex-shrink-0" />
-            <h4 className="text-xs sm:text-sm lg:text-base 2xl:text-lg font-bold text-gray-900">Kecocokan Skill</h4>
-          </div>
-          <div className="space-y-3 sm:space-y-4 lg:space-y-5">
+      {/* Skills & Strengths */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SectionCard
+          icon={<Target className="w-5 h-5" />}
+          title="Kecocokan Skill"
+          accent="primary"
+        >
+          <div className="space-y-5">
             {data.matchedSkills.length > 0 && (
               <div>
-                <p className="text-[9px] sm:text-[10px] lg:text-xs 2xl:text-sm font-semibold text-success-600 uppercase tracking-wider mb-1.5 sm:mb-2 lg:mb-3">
-                  Skill Cocok ({data.matchedSkills.length})
+                <p className="text-xs font-semibold text-success-600 uppercase tracking-wider mb-3">
+                  Cocok ({data.matchedSkills.length})
                 </p>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2 lg:gap-2.5 2xl:gap-3">
-                  {data.matchedSkills.map((s) => (
-                    <SkillTag key={s} skill={s} type="matched" />
-                  ))}
+                <div className="flex flex-wrap gap-2.5">
+                  {data.matchedSkills.map((s) => <SkillTag key={s} skill={s} type="matched" />)}
                 </div>
               </div>
             )}
             {data.partialSkills.length > 0 && (
               <div>
-                <p className="text-[9px] sm:text-[10px] lg:text-xs 2xl:text-sm font-semibold text-warning-600 uppercase tracking-wider mb-1.5 sm:mb-2 lg:mb-3">
+                <p className="text-xs font-semibold text-warning-600 uppercase tracking-wider mb-3">
                   Sebagian Cocok ({data.partialSkills.length})
                 </p>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2 lg:gap-2.5 2xl:gap-3">
-                  {data.partialSkills.map((s) => (
-                    <SkillTag key={s} skill={s} type="partial" />
-                  ))}
+                <div className="flex flex-wrap gap-2.5">
+                  {data.partialSkills.map((s) => <SkillTag key={s} skill={s} type="partial" />)}
                 </div>
               </div>
             )}
             {data.missingSkills.length > 0 && (
               <div>
-                <p className="text-[9px] sm:text-[10px] lg:text-xs 2xl:text-sm font-semibold text-danger-600 uppercase tracking-wider mb-1.5 sm:mb-2 lg:mb-3">
-                  Skill Kurang ({data.missingSkills.length})
+                <p className="text-xs font-semibold text-danger-600 uppercase tracking-wider mb-3">
+                  Kurang ({data.missingSkills.length})
                 </p>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2 lg:gap-2.5 2xl:gap-3">
-                  {data.missingSkills.map((s) => (
-                    <SkillTag key={s} skill={s} type="missing" />
-                  ))}
+                <div className="flex flex-wrap gap-2.5">
+                  {data.missingSkills.map((s) => <SkillTag key={s} skill={s} type="missing" />)}
                 </div>
               </div>
             )}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl lg:rounded-3xl border border-gray-200/60 p-4 sm:p-6 lg:p-8 2xl:p-10 shadow-sm animate-fade-in">
-          <div className="flex items-center gap-2 lg:gap-3 mb-3 sm:mb-4 lg:mb-5">
-            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6 text-primary-600 flex-shrink-0" />
-            <h4 className="text-xs sm:text-sm lg:text-base 2xl:text-lg font-bold text-gray-900">Kelebihan CV</h4>
-          </div>
-          <ul className="space-y-2 sm:space-y-2.5 lg:space-y-3 2xl:space-y-4">
+        <SectionCard
+          icon={<TrendingUp className="w-5 h-5" />}
+          title="Kelebihan CV"
+          accent="success"
+        >
+          <ul className="space-y-3">
             {data.strengths.map((item, i) => (
-              <li key={i} className="flex items-start gap-2 sm:gap-2.5 lg:gap-3 2xl:gap-4">
-                <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6 text-success-500 flex-shrink-0 mt-0.5" />
-                <span className="text-xs sm:text-sm lg:text-base 2xl:text-lg text-gray-700">{item}</span>
+              <li key={i} className="flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-success-500 flex-shrink-0 mt-0.5" />
+                <span className="text-base text-gray-600 dark:text-slate-300">{item}</span>
               </li>
             ))}
           </ul>
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-5 2xl:gap-6">
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl lg:rounded-3xl border border-gray-200/60 p-4 sm:p-6 lg:p-8 2xl:p-10 shadow-sm animate-fade-in">
-          <div className="flex items-center gap-2 lg:gap-3 mb-3 sm:mb-4 lg:mb-5">
-            <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6 text-warning-600 flex-shrink-0" />
-            <h4 className="text-xs sm:text-sm lg:text-base 2xl:text-lg font-bold text-gray-900">Area Perbaikan</h4>
-          </div>
-          <ul className="space-y-2 sm:space-y-2.5 lg:space-y-3 2xl:space-y-4">
+      {/* Improvements & Recommendations */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SectionCard
+          icon={<AlertCircle className="w-5 h-5" />}
+          title="Area Perbaikan"
+          accent="warning"
+        >
+          <ul className="space-y-3">
             {data.improvements.map((item, i) => (
-              <li key={i} className="flex items-start gap-2 sm:gap-2.5 lg:gap-3 2xl:gap-4">
-                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6 text-warning-500 flex-shrink-0 mt-0.5" />
-                <span className="text-xs sm:text-sm lg:text-base 2xl:text-lg text-gray-700">{item}</span>
+              <li key={i} className="flex items-start gap-3">
+                <ArrowRight className="w-5 h-5 text-warning-500 flex-shrink-0 mt-0.5" />
+                <span className="text-base text-gray-600 dark:text-slate-300">{item}</span>
               </li>
             ))}
           </ul>
-        </div>
+        </SectionCard>
 
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl lg:rounded-3xl border border-gray-200/60 p-4 sm:p-6 lg:p-8 2xl:p-10 shadow-sm animate-fade-in">
-          <div className="flex items-center gap-2 lg:gap-3 mb-3 sm:mb-4 lg:mb-5">
-            <Lightbulb className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6 text-primary-600 flex-shrink-0" />
-            <h4 className="text-xs sm:text-sm lg:text-base 2xl:text-lg font-bold text-gray-900">Rekomendasi</h4>
-          </div>
-          <ul className="space-y-2 sm:space-y-2.5 lg:space-y-3 2xl:space-y-4">
+        <SectionCard
+          icon={<Lightbulb className="w-5 h-5" />}
+          title="Rekomendasi"
+          accent="primary"
+        >
+          <ul className="space-y-3">
             {data.recommendations.map((item, i) => (
-              <li key={i} className="flex items-start gap-2 sm:gap-2.5 lg:gap-3 2xl:gap-4">
-                <Lightbulb className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6 text-primary-400 flex-shrink-0 mt-0.5" />
-                <span className="text-xs sm:text-sm lg:text-base 2xl:text-lg text-gray-700">{item}</span>
+              <li key={i} className="flex items-start gap-3">
+                <Lightbulb className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+                <span className="text-base text-gray-600 dark:text-slate-300">{item}</span>
               </li>
             ))}
           </ul>
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="flex justify-center pt-2 sm:pt-4 lg:pt-6 2xl:pt-8">
+      {/* Insight Perbaikan CV */}
+      <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-slate-700/50 p-8 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
+              <FileEdit className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-gray-900 dark:text-white">Insight Perbaikan CV</h4>
+              {!insightData && !insightLoading && (
+                <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">Analisa detail per bagian CV dengan contoh perbaikan</p>
+              )}
+            </div>
+          </div>
+          {!insightData && !insightLoading && (
+            <button
+              onClick={onRequestInsight}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-white text-sm font-bold shadow-md shadow-primary-500/20 hover:shadow-lg hover:shadow-primary-500/30 hover:-translate-y-0.5 transition-all duration-200"
+            >
+              <FileEdit className="w-4.5 h-4.5" />
+              Dapatkan Insight
+            </button>
+          )}
+        </div>
+
+        {insightLoading && <CvInsightLoading />}
+
+        {insightError && (
+          <div className="mt-4 p-4 rounded-xl bg-danger-50 dark:bg-danger-900/20 border border-danger-200/60 dark:border-danger-800/40 animate-fade-in">
+            <p className="text-sm text-danger-600 dark:text-danger-400 font-medium">{insightError}</p>
+          </div>
+        )}
+
+        {insightData && <CvInsight data={insightData} />}
+      </div>
+
+      {/* Reset button */}
+      <div className="flex justify-center pt-3">
         <button
           onClick={onReset}
-          className="inline-flex items-center gap-2 lg:gap-3 2xl:gap-4 px-5 sm:px-6 lg:px-8 2xl:px-10 3xl:px-12 py-2.5 sm:py-3 lg:py-4 2xl:py-5 rounded-lg sm:rounded-xl lg:rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs sm:text-sm lg:text-base 2xl:text-lg 3xl:text-xl font-semibold transition-all duration-200 hover:shadow-md"
+          className="inline-flex items-center gap-2.5 px-7 py-3.5 rounded-xl bg-gray-50 dark:bg-slate-700/50 hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-600 dark:text-slate-300 text-base font-semibold transition-all duration-200 hover:shadow-sm"
         >
-          <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6" />
+          <RotateCcw className="w-5 h-5" />
           Analisa CV Lain
         </button>
       </div>

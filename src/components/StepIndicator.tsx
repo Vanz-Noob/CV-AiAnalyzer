@@ -1,17 +1,26 @@
+/**
+ * StepIndicator — Progress bar langkah 1-2-3-4.
+ * Menampilkan indikator visual langkah yang sedang aktif, sudah selesai, atau belum tercapai.
+ */
 import { Check } from "lucide-react";
 
+/** Props untuk StepIndicator */
 interface StepIndicatorProps {
+  /** Langkah yang sedang aktif (1-based) */
   currentStep: number;
+  /** Daftar langkah dengan label dan deskripsi */
   steps: { label: string; description: string }[];
 }
 
 export default function StepIndicator({ currentStep, steps }: StepIndicatorProps) {
   return (
-    <div className="w-full max-w-2xl lg:max-w-3xl 2xl:max-w-4xl mx-auto mb-6 sm:mb-8 lg:mb-10 2xl:mb-12 px-2">
+    <div className="w-full max-w-xl mx-auto mb-10 sm:mb-12">
       <div className="flex items-center justify-between relative">
-        <div className="absolute top-4 sm:top-5 lg:top-6 2xl:top-7 left-0 right-0 h-0.5 lg:h-1 2xl:h-1 bg-gray-200" />
+        {/* Background track */}
+        <div className="absolute top-5 left-0 right-0 h-1 bg-gray-200 dark:bg-slate-700 rounded-full" />
+        {/* Active track */}
         <div
-          className="absolute top-4 sm:top-5 lg:top-6 2xl:top-7 left-0 h-0.5 lg:h-1 2xl:h-1 bg-gradient-to-r from-primary-500 to-primary-600 transition-all duration-500 ease-out"
+          className="absolute top-5 left-0 h-1 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full transition-all duration-500 ease-out"
           style={{ width: `${((Math.min(currentStep, steps.length) - 1) / (steps.length - 1)) * 100}%` }}
         />
 
@@ -22,25 +31,19 @@ export default function StepIndicator({ currentStep, steps }: StepIndicatorProps
           return (
             <div key={index} className="flex flex-col items-center relative z-10">
               <div
-                className={`w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 2xl:w-14 2xl:h-14 rounded-full flex items-center justify-center text-xs sm:text-sm lg:text-base 2xl:text-lg font-bold transition-all duration-300 border-2 lg:border-[3px] ${
+                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-base font-bold transition-all duration-300 border-3 ${
                   isCompleted
-                    ? "bg-primary-600 border-primary-600 text-white shadow-lg shadow-primary-500/30"
+                    ? "bg-primary-600 border-primary-600 text-white shadow-md shadow-primary-500/25"
                     : isCurrent
-                    ? "bg-white border-primary-500 text-primary-600 shadow-lg shadow-primary-500/20"
-                    : "bg-white border-gray-200 text-gray-400"
+                    ? "bg-white dark:bg-slate-800 border-primary-500 text-primary-600 shadow-md shadow-primary-500/15"
+                    : "bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600 text-gray-300 dark:text-slate-500"
                 }`}
               >
-                {isCompleted ? <Check className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6" /> : index + 1}
+                {isCompleted ? <Check className="w-5 h-5" /> : index + 1}
               </div>
-              <div className="mt-2 sm:mt-3 lg:mt-4 2xl:mt-5 text-center">
-                <p className={`text-[10px] sm:text-xs lg:text-sm 2xl:text-base font-semibold leading-tight ${isCurrent ? "text-primary-700" : isCompleted ? "text-primary-600" : "text-gray-400"}`}>
-                  <span className="hidden sm:inline">{step.label}</span>
-                  <span className="sm:hidden">{step.label.split(" ")[0]}</span>
-                </p>
-                <p className={`text-[8px] sm:text-[10px] lg:text-xs 2xl:text-sm mt-0.5 lg:mt-1 hidden sm:block ${isCurrent ? "text-gray-500" : "text-gray-400"}`}>
-                  {step.description}
-                </p>
-              </div>
+              <p className={`mt-3 text-xs sm:text-sm font-semibold leading-tight ${isCurrent ? "text-primary-700 dark:text-primary-400" : isCompleted ? "text-primary-600 dark:text-primary-400" : "text-gray-300 dark:text-slate-500"}`}>
+                {step.label}
+              </p>
             </div>
           );
         })}

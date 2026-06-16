@@ -1,3 +1,10 @@
+/**
+ * App — Komponen utama CV Analyzer.
+ *
+ * Mengelola flow 4 langkah: Upload CV → Job Description → Analisa → Hasil.
+ * State management dilakukan di sini dan diteruskan ke komponen anak.
+ * API call ke backend dilakukan via fetch ke /api/analyze (diproxy oleh Vite).
+ */
 import { useState, useCallback } from "react";
 import Header from "./components/Header";
 import StepIndicator from "./components/StepIndicator";
@@ -5,10 +12,16 @@ import CvUpload from "./components/CvUpload";
 import JobDescriptionInput from "./components/JobDescriptionInput";
 import LoadingAnalysis from "./components/LoadingAnalysis";
 import AnalysisResult, { type AnalysisData } from "./components/AnalysisResult";
+import { type CvInsightData } from "./components/CvInsight";
 import { ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
+import { useDarkMode } from "./hooks/useDarkMode";
 
+/** Endpoint backend untuk analisa CV (di-proxy oleh Vite ke localhost:8000) */
 const API_URL = "/api/analyze";
+/** Endpoint backend untuk insight perbaikan CV */
+const INSIGHT_API_URL = "/api/cv-insight";
 
+/** Definisi langkah-langkah dalam flow aplikasi */
 const STEPS = [
   { label: "Upload CV", description: "Upload CV Anda" },
   { label: "Job Desc", description: "Masukkan deskripsi pekerjaan" },
@@ -17,11 +30,15 @@ const STEPS = [
 ];
 
 export default function App() {
+  const { isDark, toggle: toggleDark } = useDarkMode();
   const [step, setStep] = useState(1);
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [jobDesc, setJobDesc] = useState("");
   const [result, setResult] = useState<AnalysisData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [insightData, setInsightData] = useState<CvInsightData | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
 
   const canProceed = step === 1 ? cvFile !== null : step === 2 ? jobDesc.trim().length > 20 : false;
 
@@ -56,6 +73,37 @@ export default function App() {
     }
   }, [cvFile, jobDesc]);
 
+  const handleRequestInsight = useCallback(async () => {
+    if (!cvFile || !jobDesc.trim()) return;
+
+    setInsightLoading(true);
+    setInsightError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("cv_file", cvFile);
+      formData.append("job_description", jobDesc);
+
+      const response = await fetch(INSIGHT_API_URL, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        const message = errData?.detail || `Gagal memuat insight (HTTP ${response.status})`;
+        throw new Error(message);
+      }
+
+      const data: CvInsightData = await response.json();
+      setInsightData(data);
+    } catch (err) {
+      setInsightError(err instanceof Error ? err.message : "Terjadi kesalahan saat memuat insight");
+    } finally {
+      setInsightLoading(false);
+    }
+  }, [cvFile, jobDesc]);
+
   const handleNext = useCallback(() => {
     if (step === 1 && cvFile) {
       setStep(2);
@@ -75,35 +123,40 @@ export default function App() {
     setJobDesc("");
     setResult(null);
     setError(null);
+    setInsightData(null);
+    setInsightLoading(false);
+    setInsightError(null);
   }, []);
 
   return (
-    <div className="min-h-screen min-h-dvh flex flex-col">
-      <Header />
+    <div className="min-h-screen min-h-dvh flex flex-col items-center">
+      <Header isDark={isDark} onToggleDark={toggleDark} />
 
-      <main className="flex-1 w-full max-w-5xl lg:max-w-6xl 2xl:max-w-7xl 3xl:container-wide mx-auto px-3 sm:px-6 lg:px-8 2xl:px-12 3xl:px-16 py-4 sm:py-8 lg:py-12 2xl:py-16 3xl:py-20">
-        <div className="text-center mb-4 sm:mb-6 lg:mb-8 2xl:mb-10 3xl:mb-12">
-          <h2 className="text-xl sm:text-2xl lg:text-3xl 2xl:text-4xl 3xl:text-5xl font-extrabold text-gray-900 tracking-tight px-2">
-            {step === 4 ? "Hasil Analisa CV" : "Analisa Kecocokan CV Anda"}
-          </h2>
-          <p className="text-xs sm:text-sm lg:text-base 2xl:text-lg 3xl:text-xl text-gray-500 mt-1.5 sm:mt-2 lg:mt-3 max-w-lg 2xl:max-w-2xl 3xl:max-w-3xl mx-auto px-4 leading-relaxed">
-            {step === 4
-              ? "Berikut hasil analisa kecocokan CV Anda dengan posisi yang di-apply"
-              : "Upload CV dan deskripsi pekerjaan, AI kami akan menganalisa kecocokannya"}
-          </p>
-        </div>
+      <main className="flex-1 w-full max-w-3xl lg:max-w-4xl 2xl:max-w-5xl mx-auto px-8 sm:px-10 py-10 sm:py-14">
+        {/* Page title */}
+        {step < 4 && (
+          <div className="text-center mb-8 sm:mb-10">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight mb-3">
+              Analisa Kecocokan CV Anda
+            </h2>
+            <p className="text-sm text-gray-400 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+              Upload CV dan deskripsi pekerjaan, AI kami akan menganalisa kecocokannya
+            </p>
+          </div>
+        )}
 
         {step < 4 && <StepIndicator currentStep={step} steps={STEPS} />}
 
-        <div className="bg-white/60 backdrop-blur-sm rounded-xl sm:rounded-2xl lg:rounded-3xl border border-gray-200/60 shadow-sm p-4 sm:p-6 lg:p-8 2xl:p-10 3xl:p-14">
+        {/* Main content card */}
+        <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm rounded-2xl border border-gray-200/60 dark:border-slate-700/50 shadow-sm p-8 sm:p-10">
           {step === 1 && <CvUpload onFileSelect={setCvFile} selectedFile={cvFile} />}
 
           {step === 2 && (
             <>
               <JobDescriptionInput value={jobDesc} onChange={setJobDesc} />
               {error && (
-                <div className="mt-4 p-3 sm:p-4 lg:p-5 rounded-xl sm:rounded-2xl bg-danger-50 border border-danger-500/20 animate-fade-in">
-                  <p className="text-xs sm:text-sm lg:text-base text-danger-600 font-medium">{error}</p>
+                <div className="mt-6 p-5 rounded-xl bg-danger-50 dark:bg-danger-900/20 border border-danger-200/60 dark:border-danger-800/40 animate-fade-in">
+                  <p className="text-sm text-danger-600 dark:text-danger-400 font-medium">{error}</p>
                 </div>
               )}
             </>
@@ -111,17 +164,27 @@ export default function App() {
 
           {step === 3 && <LoadingAnalysis />}
 
-          {step === 4 && result && <AnalysisResult data={result} onReset={handleReset} />}
+          {step === 4 && result && (
+            <AnalysisResult
+              data={result}
+              onReset={handleReset}
+              insightData={insightData}
+              insightLoading={insightLoading}
+              onRequestInsight={handleRequestInsight}
+              insightError={insightError}
+            />
+          )}
         </div>
 
+        {/* Navigation buttons */}
         {step < 3 && (
-          <div className="flex items-center justify-between mt-4 sm:mt-6 lg:mt-8 2xl:mt-10 gap-3">
+          <div className="flex items-center justify-between mt-10 gap-8">
             {step > 1 ? (
               <button
                 onClick={handleBack}
-                className="inline-flex items-center gap-1.5 sm:gap-2 lg:gap-2.5 px-4 sm:px-5 lg:px-6 2xl:px-8 py-2 sm:py-2.5 lg:py-3 2xl:py-4 rounded-lg sm:rounded-xl lg:rounded-2xl text-xs sm:text-sm lg:text-base 2xl:text-lg font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-all duration-200"
+                className="inline-flex items-center gap-3 px-8 py-5 rounded-xl text-base font-semibold text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-all duration-200"
               >
-                <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6" />
+                <ArrowLeft className="w-5 h-5" />
                 Kembali
               </button>
             ) : (
@@ -131,21 +194,21 @@ export default function App() {
             <button
               onClick={handleNext}
               disabled={!canProceed}
-              className={`inline-flex items-center gap-1.5 sm:gap-2 lg:gap-2.5 px-4 sm:px-6 lg:px-8 2xl:px-10 py-2.5 sm:py-3 lg:py-3.5 2xl:py-4 rounded-lg sm:rounded-xl lg:rounded-2xl text-xs sm:text-sm lg:text-base 2xl:text-lg font-bold transition-all duration-200 ${
+              className={`inline-flex items-center gap-3.5 px-12 py-5.5 rounded-xl text-lg font-bold transition-all duration-200 ${
                 canProceed
-                  ? "bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 hover:-translate-y-0.5"
-                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  ? "bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/35 hover:-translate-y-0.5"
+                  : "bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-slate-500 cursor-not-allowed"
               }`}
             >
               {step === 2 ? (
                 <>
-                  <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6" />
+                  <Sparkles className="w-6 h-6" />
                   Mulai Analisa
                 </>
               ) : (
                 <>
                   Lanjutkan
-                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 2xl:w-6 2xl:h-6" />
+                  <ArrowRight className="w-6 h-6" />
                 </>
               )}
             </button>
@@ -153,7 +216,7 @@ export default function App() {
         )}
       </main>
 
-      <footer className="text-center py-4 sm:py-6 lg:py-8 2xl:py-10 text-[10px] sm:text-xs lg:text-sm 2xl:text-base text-gray-400">
+      <footer className="w-full max-w-3xl lg:max-w-4xl 2xl:max-w-5xl text-center py-10 text-xs text-gray-300 dark:text-slate-600">
         RnD Renaldi Azhar 2026
       </footer>
     </div>

@@ -1,3 +1,16 @@
+"""
+ArkClaw Service — Integrasi ArkClaw Agent untuk analisa CV (opsional).
+
+Mengirimkan permintaan analisa CV ke ArkClaw webhook dan mem-parsing
+respons JSON yang dikembalikan. Digunakan sebagai alternatif
+dari analisa langsung via Seed LLM.
+
+Konfigurasi via environment variables (.env):
+    ARKCLAW_WEBHOOK_URL    — URL webhook ArkClaw
+    ARKCLAW_RECEIVE_SECRET — Secret untuk autentikasi ke webhook
+    ARKCLAW_TIMEOUT        — Timeout request dalam detik (default: 120)
+"""
+
 import json
 import os
 
@@ -34,6 +47,23 @@ Panduan penilaian:
 
 
 def analyze_cv_via_arkclaw(cv_text: str, job_description: str, sender_id: str = "cv-analyzer") -> dict:
+    """Analisa kecocokan CV dengan job description menggunakan ArkClaw Agent.
+
+    Mengirimkan teks CV dan job description ke ArkClaw webhook,
+    lalu mem-parsing respons JSON yang dikembalikan.
+
+    Args:
+        cv_text: Teks CV yang sudah diekstrak dari file.
+        job_description: Deskripsi pekerjaan yang di-apply.
+        sender_id: ID pengirim untuk webhook (default: "cv-analyzer").
+
+    Returns:
+        Dict dengan keys: matchScore, summary, matchedSkills,
+        missingSkills, partialSkills, strengths, improvements, recommendations.
+
+    Raises:
+        Exception: Jika ArkClaw mengembalikan error atau mode async aktif.
+    """
     user_message = f"""{CV_ANALYSIS_PROMPT}
 
 Berikut adalah CV kandidat:
@@ -78,6 +108,18 @@ Analisa kecocokan CV ini dengan job description di atas. Berikan HASILNYA DALAM 
 
 
 def _parse_arkclaw_reply(reply: str) -> dict:
+    """Parse respons teks dari ArkClaw menjadi dict terstruktur.
+
+    Menangani respons yang mungkin dibungkus dalam code block markdown
+    atau mengandung teks di luar JSON. Juga memvalidasi bahwa semua
+    key yang diperlukan ada dalam hasil.
+
+    Args:
+        reply: Teks mentah respons dari ArkClaw.
+
+    Returns:
+        Dict hasil parse JSON, atau fallback result jika gagal.
+    """
     raw = reply.strip()
 
     if raw.startswith("```json"):
@@ -109,6 +151,14 @@ def _parse_arkclaw_reply(reply: str) -> dict:
 
 
 def _fallback_result(raw_reply: str) -> dict:
+    """Menghasilkan fallback result saat parsing JSON gagal total.
+
+    Args:
+        raw_reply: Teks mentah respons yang tidak bisa diparse.
+
+    Returns:
+        Dict dengan matchScore 0 dan summary berisi potongan teks mentah.
+    """
     return {
         "matchScore": 0,
         "summary": raw_reply[:500] if raw_reply else "Tidak ada respons dari ArkClaw.",

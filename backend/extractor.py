@@ -1,8 +1,23 @@
+"""
+Ekstraktor teks CV — Mendukung format PDF dan DOC/DOCX.
+
+Menggunakan PyMuPDF (fitz) untuk PDF dan python-docx untuk DOCX.
+Menangani ekstraksi teks dari paragraf dan tabel (untuk DOCX).
+"""
+
 import fitz
 from docx import Document
 
 
 def extract_text_from_pdf(content: bytes) -> str:
+    """Ekstrak seluruh teks dari file PDF.
+
+    Args:
+        content: Konten biner file PDF.
+
+    Returns:
+        String teks gabungan dari semua halaman, dipisahkan newline.
+    """
     doc = fitz.open(stream=content, filetype="pdf")
     text_parts = []
     for page in doc:
@@ -12,6 +27,15 @@ def extract_text_from_pdf(content: bytes) -> str:
 
 
 def extract_text_from_docx(content: bytes) -> str:
+    """Ekstrak teks dari file DOCX, termasuk isi tabel.
+
+    Args:
+        content: Konten biner file DOCX.
+
+    Returns:
+        String teks gabungan dari paragraf dan baris tabel,
+        sel-sel tabel dipisahkan dengan " | ".
+    """
     from io import BytesIO
 
     doc = Document(BytesIO(content))
@@ -28,6 +52,18 @@ def extract_text_from_docx(content: bytes) -> str:
 
 
 def extract_cv_text(content: bytes, filename: str) -> str:
+    """Ekstrak teks dari file CV berdasarkan ekstensi filename.
+
+    Args:
+        content: Konten biner file CV.
+        filename: Nama file (digunakan untuk menentukan format).
+
+    Returns:
+        String teks yang berhasil diekstrak.
+
+    Raises:
+        ValueError: Jika format file tidak didukung (bukan PDF/DOC/DOCX).
+    """
     ext = filename.rsplit(".", 1)[-1].lower()
 
     if ext == "pdf":
